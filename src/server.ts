@@ -31,7 +31,8 @@ async function main(): Promise<void> {
   await runMigrations();
 
   const installationStore = createPgInstallationStore();
-  const redirectUri = `${cfg.APP_BASE_URL}/slack/oauth_redirect`;
+  const redirectUri = `${cfg.APP_BASE_URL.replace(/\/$/, "")}/slack/oauth_redirect`;
+  const redirectUriPath = new URL(redirectUri).pathname;
 
   const receiver = new ExpressReceiver({
     signingSecret: cfg.SLACK_SIGNING_SECRET,
@@ -43,6 +44,7 @@ async function main(): Promise<void> {
     processBeforeResponse: true,
     installerOptions: {
       directInstall: true,
+      redirectUriPath,
     },
     redirectUri,
   });
