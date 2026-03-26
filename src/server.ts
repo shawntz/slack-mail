@@ -1,5 +1,7 @@
 import express from "express";
-import { App, ExpressReceiver } from "@slack/bolt";
+import slackBolt from "@slack/bolt";
+
+const { App, ExpressReceiver } = slackBolt;
 import { getConfig } from "./config.js";
 import {
   deleteExpiredOAuthStates,

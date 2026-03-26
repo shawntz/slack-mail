@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
-import { WebClient } from "@slack/web-api";
+import slackWebApi from "@slack/web-api";
+import type { WebClient } from "@slack/web-api";
+
+const { WebClient: WebClientCtor } = slackWebApi;
 import { createGmailForRefresh } from "./client.js";
 import { extractPlainText, getHeader } from "./mime.js";
 import {
@@ -148,7 +151,7 @@ export async function processGmailAccountInboxDelta(account: LinkedGmailAccount)
   if (!ws) return;
 
   const botTok = decryptBotToken(ws);
-  const web = new WebClient(botTok);
+  const web = new WebClientCtor(botTok);
   const gmail = createGmailForRefresh(decryptGoogleRefreshToken(account));
 
   let startHistoryId = account.history_id;
