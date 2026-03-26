@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "echo '[build] start' && tsc && echo '[build] done'",
-    "build:verbose": "tsc --listEmittedFiles --diagnostics",
+    "build:verbose": "tsc --version && tsc --diagnostics --listEmittedFiles",
+    "build:list-inputs": "tsc --listFilesOnly",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "migrate": "tsx src/db/migrate.ts"
