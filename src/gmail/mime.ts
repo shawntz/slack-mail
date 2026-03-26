@@ -57,3 +57,24 @@ export function getHeader(
 ): string {
   return headerMap(headers)[name.toLowerCase()] ?? "";
 }
+
+/** Display name + email for Slack mrkdwn when the From header includes a phrase address. */
+export function formatFromForSlack(fromHeader: string): string {
+  const raw = fromHeader.trim();
+  if (!raw || raw === "(unknown)") return "(unknown)";
+
+  const m = raw.match(/^(.*?)\s*<([^>]+@[^>]+)>\s*$/);
+  if (m) {
+    const namePart = m[1]!.replace(/^["']|["']$/g, "").trim();
+    const email = m[2]!.trim();
+    const nameLooksLikeEmail = /^[^\s@]+@[^\s@]+$/.test(namePart);
+    if (namePart && !nameLooksLikeEmail) {
+      const safe = namePart.replace(/\*/g, "·");
+      return `*${safe}* \`${email}\``;
+    }
+    return `\`${email}\``;
+  }
+
+  if (/^[^\s@]+@[^\s@]+$/.test(raw)) return `\`${raw}\``;
+  return raw.replace(/\*/g, "·");
+}

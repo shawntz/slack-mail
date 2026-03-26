@@ -4,7 +4,7 @@ import type { WebClient } from "@slack/web-api";
 
 const { WebClient: WebClientCtor } = slackWebApi;
 import { createGmailForRefresh } from "./client.js";
-import { extractPlainText, getHeader } from "./mime.js";
+import { extractPlainText, formatFromForSlack, getHeader } from "./mime.js";
 import {
   claimGmailMessagePost,
   decryptBotToken,
@@ -24,6 +24,11 @@ export type LinkedGmailAccount = SlackUserGmailRow & { slack_team_id: string };
 function channelBaseName(threadId: string): string {
   const h = createHash("sha256").update(threadId).digest("hex").slice(0, 10);
   return `mail-${h}`;
+}
+
+function emailFromHeader(value: string): string {
+  const m = value.match(/<([^>]+)>/);
+  return (m ? m[1]! : value).trim().toLowerCase();
 }
 
 async function createPrivateMailChannel(web: WebClient, threadId: string): Promise<string> {
@@ -92,6 +97,7 @@ async function ingestOneMessage(params: {
   });
   const labels = msg.data.labelIds ?? [];
   if (!labels.includes("INBOX")) return;
+  if (labels.includes("SENT")) return;
 
   const threadId = msg.data.threadId;
   if (!threadId) return;
@@ -99,6 +105,8 @@ async function ingestOneMessage(params: {
   const headers = msg.data.payload?.headers;
   const subject = getHeader(headers, "Subject") || "(no subject)";
   const from = getHeader(headers, "From") || "(unknown)";
+  const linked = (params.account.google_email ?? "").trim().toLowerCase();
+  if (linked && emailFromHeader(from) === linked) return;
   const rfcId = getHeader(headers, "Message-ID") || params.messageId;
   const body = extractPlainText(msg.data.payload) || msg.data.snippet || "";
 
@@ -119,7 +127,8 @@ async function ingestOneMessage(params: {
   });
   if (!claimed) return;
 
-  const text = `*From:* ${from}\n*Subject:* ${subject}\n*Message-ID:* \`${rfcId}\`\n\n${body}`;
+  const fromLine = formatFromForSlack(from);
+  const text = `*From:* ${fromLine}\n*Subject:* ${subject}\n*Message-ID:* \`${rfcId}\`\n\n${body}`;
   let postTs: string | undefined;
   try {
     const post = await params.web.chat.postMessage({
