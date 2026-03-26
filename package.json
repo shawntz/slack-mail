@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "echo '[build] start' && tsc && echo '[build] done'",
+    "build:verbose": "tsc --listEmittedFiles --diagnostics",
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.ts",
     "migrate": "tsx src/db/migrate.ts"
