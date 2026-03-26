@@ -3,11 +3,14 @@ import { z } from "zod";
 
 loadEnv();
 
+/** Trim whitespace/newlines from env values (common when pasting into .env or hosting UIs). */
+const t = z.preprocess((v) => (typeof v === "string" ? v.trim() : v), z.string());
+
 const schema = z.object({
-  SLACK_CLIENT_ID: z.string().min(1),
-  SLACK_CLIENT_SECRET: z.string().min(1),
-  SLACK_SIGNING_SECRET: z.string().min(1),
-  SLACK_STATE_SECRET: z.string().min(16),
+  SLACK_CLIENT_ID: t.pipe(z.string().min(1)),
+  SLACK_CLIENT_SECRET: t.pipe(z.string().min(1)),
+  SLACK_SIGNING_SECRET: t.pipe(z.string().min(1)),
+  SLACK_STATE_SECRET: t.pipe(z.string().min(16)),
   APP_BASE_URL: z.string().url(),
   DATABASE_URL: z.string().url(),
   GOOGLE_CLIENT_ID: z.string().min(1),
