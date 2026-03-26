@@ -8,23 +8,20 @@ import { sendGmailReplyFromSlack } from "../gmail/sendReply.js";
 import { createGoogleLinkState, googleLinkUrl } from "../routes/oauthGoogle.js";
 
 export function registerSlackHandlers(app: App): void {
-  app.command("/email-link", async ({ ack, command, client }) => {
-    await ack();
+  app.command("/email-link", async ({ ack, command }) => {
     const teamId = command.team_id;
     const ws = await getWorkspaceBySlackTeamId(teamId);
     if (!ws) {
-      await client.chat.postEphemeral({
-        channel: command.channel_id,
-        user: command.user_id,
+      await ack({
+        response_type: "ephemeral",
         text: "This workspace is not installed. Install the app from your Slack admin first.",
       });
       return;
     }
     const stateToken = await createGoogleLinkState(ws.id, command.user_id);
     const url = googleLinkUrl(stateToken);
-    await client.chat.postEphemeral({
-      channel: command.channel_id,
-      user: command.user_id,
+    await ack({
+      response_type: "ephemeral",
       text: `Connect your Gmail (link expires in 10 minutes):\n${url}`,
     });
   });
