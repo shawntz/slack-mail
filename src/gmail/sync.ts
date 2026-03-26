@@ -50,7 +50,6 @@ async function ensureThreadSlackChannel(params: {
   workspaceId: number;
   slackTeamId: string;
   slackUserId: string;
-  botUserId: string;
   gmailThreadId: string;
   subject: string | null;
   lastMessageId: string | null;
@@ -66,7 +65,7 @@ async function ensureThreadSlackChannel(params: {
 
   await params.web.conversations.invite({
     channel: channelId,
-    users: `${params.slackUserId},${params.botUserId}`,
+    users: params.slackUserId,
   });
 
   return insertThreadChannelOrGet({
@@ -82,7 +81,6 @@ async function ensureThreadSlackChannel(params: {
 async function ingestOneMessage(params: {
   account: LinkedGmailAccount;
   workspaceId: number;
-  botUserId: string;
   web: WebClient;
   messageId: string;
 }): Promise<void> {
@@ -109,7 +107,6 @@ async function ingestOneMessage(params: {
     workspaceId: params.workspaceId,
     slackTeamId: params.account.slack_team_id,
     slackUserId: params.account.slack_user_id,
-    botUserId: params.botUserId,
     gmailThreadId: threadId,
     subject,
     lastMessageId: rfcId,
@@ -183,7 +180,6 @@ export async function processGmailAccountInboxDelta(account: LinkedGmailAccount)
             await ingestOneMessage({
               account,
               workspaceId: account.workspace_id,
-              botUserId: ws.bot_user_id,
               web,
               messageId: mid,
             });
