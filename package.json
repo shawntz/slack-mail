@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "echo '[build] start' && node --max-old-space-size=1536 node_modules/typescript/lib/tsc.js && echo '[build] done'",
+    "build": "echo '[build] start' && node --max-old-space-size=1536 node_modules/typescript/lib/tsc.js && node --input-type=module -e \"import { cpSync } from 'node:fs'; cpSync('src/db/migrations', 'dist/db/migrations', { recursive: true });\" && echo '[build] done'",
     "build:verbose": "node --max-old-space-size=1536 node_modules/typescript/lib/tsc.js --version && node --max-old-space-size=1536 node_modules/typescript/lib/tsc.js --diagnostics --listEmittedFiles",
     "build:list-inputs": "node --max-old-space-size=1536 node_modules/typescript/lib/tsc.js --listFilesOnly",
     "start": "node dist/server.js",
