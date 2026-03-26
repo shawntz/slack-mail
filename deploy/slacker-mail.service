@@ -1,0 +1,26 @@
+# Install (adjust paths, then):
+#   sudo cp deploy/slacker-mail.service /etc/systemd/system/slacker-mail.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable slacker-mail
+#   sudo systemctl start slacker-mail
+#   sudo systemctl status slacker-mail
+#
+# Set absolute Node path: `sudo -i bash -lc 'command -v node'`
+# Set WorkingDirectory to your repo root (where dist/ and .env live).
+
+[Unit]
+Description=Slacker Mail (Slack + Gmail bridge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/slack-mail
+EnvironmentFile=-/root/slack-mail/.env
+ExecStart=/usr/bin/node dist/server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
