@@ -1,0 +1,20 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <rect width="256" height="256" rx="52" fill="#4A154B"/>
+  <!-- Envelope body -->
+  <rect x="56" y="78" width="144" height="96" rx="10" fill="#611f69"/>
+  <!-- Envelope flap -->
+  <path d="M56 88 L128 130 L200 88" fill="#7C3085"/>
+  <path d="M56 88 L128 130 L200 88" fill="none" stroke="#E8DEF8" stroke-width="2" stroke-linejoin="round" opacity="0.5"/>
+  <!-- Envelope border -->
+  <rect x="56" y="78" width="144" height="96" rx="10" fill="none" stroke="#E8DEF8" stroke-width="1.5" opacity="0.3"/>
+  <!-- Category channel bars -->
+  <rect x="72" y="154" width="22" height="6" rx="3" fill="#36C5F0"/>
+  <rect x="100" y="154" width="22" height="6" rx="3" fill="#2EB67D"/>
+  <rect x="128" y="154" width="22" height="6" rx="3" fill="#ECB22E"/>
+  <rect x="156" y="154" width="22" height="6" rx="3" fill="#E01E5A"/>
+  <!-- Slack corner dots -->
+  <circle cx="44" cy="44" r="10" fill="#36C5F0"/>
+  <circle cx="212" cy="44" r="10" fill="#2EB67D"/>
+  <circle cx="44" cy="212" r="10" fill="#ECB22E"/>
+  <circle cx="212" cy="212" r="10" fill="#E01E5A"/>
+</svg>
