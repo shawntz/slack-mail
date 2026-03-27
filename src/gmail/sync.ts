@@ -53,7 +53,7 @@ async function createPrivateChannel(web: WebClient, baseName: string): Promise<s
   }
 }
 
-async function ensureCategoryChannel(params: {
+export async function ensureCategoryChannel(params: {
   web: WebClient;
   workspaceId: number;
   slackUserId: string;
