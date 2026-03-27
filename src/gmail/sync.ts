@@ -1,9 +1,7 @@
-import { createHash } from "node:crypto";
 import slackWebApi from "@slack/web-api";
 import type { WebClient } from "@slack/web-api";
 
 const { WebClient: WebClientCtor } = slackWebApi;
-import type { gmail_v1 } from "googleapis";
 import { createGmailForRefresh } from "./client.js";
 import { extractPlainText, formatFromForSlack, getHeader } from "./mime.js";
 import {
@@ -11,49 +9,33 @@ import {
   decryptBotToken,
   decryptGoogleRefreshToken,
   finalizeGmailMessageSlackTs,
-  getThreadChannelMapping,
+  getCategoryChannel,
+  getThreadSlackThread,
   getWorkspaceBySlackTeamId,
-  insertThreadChannelOrGet,
+  insertCategoryChannelOrGet,
+  insertThreadSlackThreadOrGet,
   releaseGmailMessageClaim,
   updateGmailHistoryId,
-  updateThreadLastMessageId,
+  updateThreadSlackLastMessageId,
 } from "../db/repos.js";
-import type { SlackUserGmailRow } from "../db/repos.js";
+import type { GmailCategory, SlackUserGmailRow } from "../db/repos.js";
 
 export type LinkedGmailAccount = SlackUserGmailRow & { slack_team_id: string };
-
-function slackChannelSlug(input: string): string {
-  const slug = input
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-  return slug || "mail";
-}
-
-function channelBaseName(params: {
-  threadId: string;
-  firstMessageDateMs: number | null;
-  subject: string | null;
-}): string {
-  const h = createHash("sha256").update(params.threadId).digest("hex").slice(0, 8);
-  const dateStr = params.firstMessageDateMs ? new Date(params.firstMessageDateMs).toISOString().slice(0, 10) : "unknown";
-  const subjectSlug = params.subject ? slackChannelSlug(params.subject).slice(0, 40) : "thread";
-
-  // Slack channel `name` needs: [a-z0-9-], <= 80-ish, and no spaces.
-  // Keep a short hash suffix to avoid collisions.
-  let base = `mail-${dateStr}-${subjectSlug}-${h}`;
-  base = base.replace(/[^a-z0-9-]/g, "-");
-  if (base.length > 79) base = base.slice(0, 79).replace(/-+$/g, "");
-  return base;
-}
 
 function emailFromHeader(value: string): string {
   const m = value.match(/<([^>]+)>/);
   return (m ? m[1]! : value).trim().toLowerCase();
 }
 
-async function createPrivateMailChannel(web: WebClient, baseName: string): Promise<string> {
+function labelToCategory(labelIds: string[]): GmailCategory {
+  if (labelIds.includes("CATEGORY_SOCIAL")) return "social";
+  if (labelIds.includes("CATEGORY_PROMOTIONS")) return "promotions";
+  if (labelIds.includes("CATEGORY_UPDATES")) return "updates";
+  if (labelIds.includes("CATEGORY_FORUMS")) return "forums";
+  return "primary";
+}
+
+async function createPrivateChannel(web: WebClient, baseName: string): Promise<string> {
   const tryName = async (name: string): Promise<string> => {
     const res = await web.conversations.create({ name, is_private: true });
     const id = res.channel?.id;
@@ -71,74 +53,33 @@ async function createPrivateMailChannel(web: WebClient, baseName: string): Promi
   }
 }
 
-async function ensureThreadSlackChannel(params: {
+async function ensureCategoryChannel(params: {
   web: WebClient;
-  gmail: gmail_v1.Gmail;
   workspaceId: number;
-  slackTeamId: string;
   slackUserId: string;
-  gmailThreadId: string;
-  subject: string | null;
-  firstMessageDateMs: number | null;
-  lastMessageId: string | null;
+  category: GmailCategory;
 }): Promise<string> {
-  const existing = await getThreadChannelMapping(
+  const existing = await getCategoryChannel(
     params.workspaceId,
     params.slackUserId,
-    params.gmailThreadId,
+    params.category,
   );
   if (existing) return existing.slack_channel_id;
 
-  const firstSummary = await getThreadFirstMessageSummary(params.gmail, params.gmailThreadId);
-  const computedFirstDateMs = firstSummary.firstMessageDateMs ?? params.firstMessageDateMs;
-  const subjectForChannel = firstSummary.subject ?? params.subject;
-  const base = channelBaseName({
-    threadId: params.gmailThreadId,
-    firstMessageDateMs: computedFirstDateMs,
-    subject: subjectForChannel,
-  });
-
-  const channelId = await createPrivateMailChannel(params.web, base);
+  const baseName = `mail-${params.category}`;
+  const channelId = await createPrivateChannel(params.web, baseName);
 
   await params.web.conversations.invite({
     channel: channelId,
     users: params.slackUserId,
   });
 
-  return insertThreadChannelOrGet({
+  return insertCategoryChannelOrGet({
     workspaceId: params.workspaceId,
     slackUserId: params.slackUserId,
-    gmailThreadId: params.gmailThreadId,
+    category: params.category,
     slackChannelId: channelId,
-    subject: subjectForChannel,
-    lastMessageId: params.lastMessageId,
   });
-}
-
-async function getThreadFirstMessageSummary(
-  gmail: gmail_v1.Gmail,
-  gmailThreadId: string,
-): Promise<{ firstMessageDateMs: number | null; subject: string | null }> {
-  try {
-    // We only need earliest message's internalDate + Subject header for naming.
-    const thread = await gmail.users.threads.get({
-      userId: "me",
-      id: gmailThreadId,
-      format: "metadata",
-      metadataHeaders: ["Subject"],
-    });
-    const messages = thread.data.messages ?? [];
-    if (!messages.length) return { firstMessageDateMs: null, subject: null };
-
-    const first = [...messages].sort((a, b) => Number(a.internalDate ?? 0) - Number(b.internalDate ?? 0))[0]!;
-    const firstMessageDateMs = first.internalDate ? Number(first.internalDate) : null;
-    const headers = first.payload?.headers;
-    const subject = getHeader(headers, "Subject") || null;
-    return { firstMessageDateMs, subject };
-  } catch {
-    // Naming is a nice-to-have; avoid breaking ingestion.
-    return { firstMessageDateMs: null, subject: null };
-  }
 }
 
 async function ingestOneMessage(params: {
@@ -146,7 +87,6 @@ async function ingestOneMessage(params: {
   workspaceId: number;
   web: WebClient;
   messageId: string;
-  firstMessageDateMs: number | null;
 }): Promise<void> {
   const gmail = createGmailForRefresh(decryptGoogleRefreshToken(params.account));
   const msg = await gmail.users.messages.get({
@@ -169,17 +109,30 @@ async function ingestOneMessage(params: {
   const rfcId = getHeader(headers, "Message-ID") || params.messageId;
   const body = extractPlainText(msg.data.payload) || msg.data.snippet || "";
 
-  const channelId = await ensureThreadSlackChannel({
-    web: params.web,
-    gmail,
-    workspaceId: params.workspaceId,
-    slackTeamId: params.account.slack_team_id,
-    slackUserId: params.account.slack_user_id,
-    gmailThreadId: threadId,
-    subject,
-    firstMessageDateMs: params.firstMessageDateMs,
-    lastMessageId: rfcId,
-  });
+  // Check if this thread already has a mapping (use its existing channel regardless of current label category)
+  const existingThread = await getThreadSlackThread(
+    params.workspaceId,
+    params.account.slack_user_id,
+    threadId,
+  );
+
+  let channelId: string;
+  let threadTs: string | undefined;
+
+  if (existingThread) {
+    // Existing thread — post as a threaded reply in the same category channel
+    channelId = existingThread.slack_channel_id;
+    threadTs = existingThread.slack_thread_ts;
+  } else {
+    // New thread — determine category, ensure channel, post root message
+    const category = labelToCategory(labels);
+    channelId = await ensureCategoryChannel({
+      web: params.web,
+      workspaceId: params.workspaceId,
+      slackUserId: params.account.slack_user_id,
+      category,
+    });
+  }
 
   const claimed = await claimGmailMessagePost({
     workspaceId: params.workspaceId,
@@ -196,6 +149,7 @@ async function ingestOneMessage(params: {
       channel: channelId,
       text,
       mrkdwn: true,
+      ...(threadTs ? { thread_ts: threadTs } : {}),
     });
     postTs = post.ts;
     if (postTs) {
@@ -206,23 +160,33 @@ async function ingestOneMessage(params: {
     throw e;
   }
 
-  // Mark the Gmail message as read once we've posted it to Slack.
-  // Note: this marks as read on "synced to Slack", not when the human user clicks/opens the Slack message.
+  // For new threads, store the thread mapping using the root message ts
+  if (!existingThread && postTs) {
+    await insertThreadSlackThreadOrGet({
+      workspaceId: params.workspaceId,
+      slackUserId: params.account.slack_user_id,
+      gmailThreadId: threadId,
+      slackChannelId: channelId,
+      slackThreadTs: postTs,
+      subject,
+      lastMessageId: rfcId,
+    });
+  }
+
+  // Mark as read
   if (labels.includes("UNREAD")) {
     try {
       await gmail.users.messages.modify({
         userId: "me",
         id: params.messageId,
-        requestBody: {
-          removeLabelIds: ["UNREAD"],
-        },
+        requestBody: { removeLabelIds: ["UNREAD"] },
       });
     } catch (e) {
       console.error("Failed to mark Gmail message as read", params.messageId, e);
     }
   }
 
-  await updateThreadLastMessageId(
+  await updateThreadSlackLastMessageId(
     params.workspaceId,
     params.account.slack_user_id,
     threadId,
@@ -264,13 +228,11 @@ export async function processGmailAccountInboxDelta(account: LinkedGmailAccount)
         for (const added of h.messagesAdded ?? []) {
           const mid = added.message?.id;
           if (mid) {
-            const firstMessageDateMs = added.message?.internalDate ? Number(added.message.internalDate) : null;
             await ingestOneMessage({
               account,
               workspaceId: account.workspace_id,
               web,
               messageId: mid,
-              firstMessageDateMs,
             });
           }
         }
