@@ -1,7 +1,7 @@
 import type { App } from "@slack/bolt";
 import {
   getSlackUserGmailByWorkspaceAndUser,
-  getThreadMappingBySlackChannel,
+  getThreadMappingBySlackThread,
   getWorkspaceById,
   getWorkspaceBySlackTeamId,
 } from "../db/repos.js";
@@ -35,7 +35,11 @@ export function registerSlackHandlers(app: App): void {
     if (!("channel" in message) || typeof message.channel !== "string") return;
     if (!("text" in message) || typeof message.text !== "string" || !message.text.trim()) return;
 
-    const mapping = await getThreadMappingBySlackChannel(message.channel);
+    // Only handle threaded replies — ignore top-level messages in category channels
+    if (!("thread_ts" in message) || !message.thread_ts) return;
+    if (message.thread_ts === message.ts) return;
+
+    const mapping = await getThreadMappingBySlackThread(message.channel, message.thread_ts);
     if (!mapping) return;
     if (mapping.slack_user_id !== message.user) return;
 
@@ -52,11 +56,16 @@ export function registerSlackHandlers(app: App): void {
         userEmail: acct.google_email,
         bodyText: message.text,
       });
+      await client.reactions.add({
+        channel: message.channel,
+        timestamp: message.ts,
+        name: "white_check_mark",
+      });
     } catch (e) {
       logger.error(e);
       await client.chat.postMessage({
         channel: message.channel,
-        thread_ts: message.ts,
+        thread_ts: message.thread_ts,
         text: `Could not send email: ${e instanceof Error ? e.message : String(e)}`,
       });
     }
