@@ -69,17 +69,33 @@ async function ensureCategoryChannel(params: {
   const baseName = `mail-${params.category}`;
   const channelId = await createPrivateChannel(params.web, baseName);
 
-  await params.web.conversations.invite({
-    channel: channelId,
-    users: params.slackUserId,
-  });
+  try {
+    await params.web.conversations.invite({
+      channel: channelId,
+      users: params.slackUserId,
+    });
+  } catch (e: unknown) {
+    const err = e as { data?: { error?: string } };
+    if (err.data?.error !== "already_in_channel") throw e;
+  }
 
-  return insertCategoryChannelOrGet({
+  const storedChannelId = await insertCategoryChannelOrGet({
     workspaceId: params.workspaceId,
     slackUserId: params.slackUserId,
     category: params.category,
     slackChannelId: channelId,
   });
+
+  // If we lost a race, archive the orphaned channel we just created
+  if (storedChannelId !== channelId) {
+    try {
+      await params.web.conversations.archive({ channel: channelId });
+    } catch {
+      // best-effort cleanup
+    }
+  }
+
+  return storedChannelId;
 }
 
 async function ingestOneMessage(params: {
@@ -186,12 +202,14 @@ async function ingestOneMessage(params: {
     }
   }
 
-  await updateThreadSlackLastMessageId(
-    params.workspaceId,
-    params.account.slack_user_id,
-    threadId,
-    rfcId,
-  );
+  if (postTs) {
+    await updateThreadSlackLastMessageId(
+      params.workspaceId,
+      params.account.slack_user_id,
+      threadId,
+      rfcId,
+    );
+  }
 }
 
 export async function processGmailAccountInboxDelta(account: LinkedGmailAccount): Promise<void> {

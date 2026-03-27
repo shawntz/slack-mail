@@ -2,7 +2,6 @@ import type { App } from "@slack/bolt";
 import {
   getSlackUserGmailByWorkspaceAndUser,
   getThreadMappingBySlackThread,
-  getWorkspaceById,
   getWorkspaceBySlackTeamId,
 } from "../db/repos.js";
 import { sendGmailReplyFromSlack } from "../gmail/sendReply.js";
@@ -43,10 +42,7 @@ export function registerSlackHandlers(app: App): void {
     if (!mapping) return;
     if (mapping.slack_user_id !== message.user) return;
 
-    const ws = await getWorkspaceById(mapping.workspace_id);
-    if (!ws) return;
-
-    const acct = await getSlackUserGmailByWorkspaceAndUser(ws.id, message.user);
+    const acct = await getSlackUserGmailByWorkspaceAndUser(mapping.workspace_id, message.user);
     if (!acct?.google_email) return;
 
     try {
