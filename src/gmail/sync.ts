@@ -158,7 +158,7 @@ async function ingestOneMessage(params: {
   if (!claimed) return;
 
   const fromLine = formatFromForSlack(from);
-  const text = `*From:* ${fromLine}\n*Subject:* ${subject}\n*Message-ID:* \`${rfcId}\`\n\n${body}`;
+  const text = `*From:* ${fromLine}\n*Subject:* ${subject}\n\n${body}`;
   let postTs: string | undefined;
   try {
     const post = await params.web.chat.postMessage({
