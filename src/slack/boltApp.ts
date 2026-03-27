@@ -16,7 +16,7 @@ import { ensureCategoryChannel } from "../gmail/sync.js";
 import { createGoogleLinkState, googleLinkUrl } from "../routes/oauthGoogle.js";
 
 export function registerSlackHandlers(app: App): void {
-  app.command("/email-link", async ({ ack, command }) => {
+  app.command("/login", async ({ ack, command }) => {
     const teamId = command.team_id;
     const ws = await getWorkspaceBySlackTeamId(teamId);
     if (!ws) {
@@ -44,7 +44,7 @@ export function registerSlackHandlers(app: App): void {
 
     const acct = await getSlackUserGmailByWorkspaceAndUser(ws.id, command.user_id);
     if (!acct?.google_email) {
-      await ack({ response_type: "ephemeral", text: "Link your Gmail first with /email-link" });
+      await ack({ response_type: "ephemeral", text: "Link your Gmail first with /login" });
       return;
     }
 
