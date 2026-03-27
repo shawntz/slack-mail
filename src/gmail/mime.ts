@@ -31,6 +31,30 @@ export function extractPlainText(payload: gmail_v1.Schema$MessagePart | undefine
   return "";
 }
 
+export type AttachmentMeta = {
+  filename: string;
+  mimeType: string;
+  attachmentId: string;
+  size: number;
+};
+
+export function extractAttachments(payload: gmail_v1.Schema$MessagePart | undefined): AttachmentMeta[] {
+  const attachments: AttachmentMeta[] = [];
+  walkParts(payload, (p) => {
+    const filename = p.filename;
+    const attachmentId = p.body?.attachmentId;
+    if (filename && attachmentId) {
+      attachments.push({
+        filename,
+        mimeType: p.mimeType ?? "application/octet-stream",
+        attachmentId,
+        size: p.body?.size ?? 0,
+      });
+    }
+  });
+  return attachments;
+}
+
 function stripHtml(html: string): string {
   return html
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
