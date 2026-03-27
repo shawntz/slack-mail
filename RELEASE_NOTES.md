@@ -1,14 +1,14 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="Slacker Mail" width="80" height="80">
+  <img src="assets/logo.svg" alt="Slack Mailbot Logo" width="80" height="80">
 </p>
 
-<h1 align="center">Slacker Mail v1.0.0</h1>
+<h1 align="center">Slack Mailbot v1.0.0</h1>
 
 <p align="center"><strong>Your Gmail inbox, inside Slack.</strong></p>
 
 ---
 
-We're excited to ship the first release of Slacker Mail — a self-hosted Slack app that brings your Gmail directly into your workspace. Read, reply, compose, and manage email without ever leaving Slack.
+I'm excited to ship the first release of Slack Mailbot — a self-hosted Slack app that brings your Gmail directly into your workspace. Read, reply, compose, and manage email without ever leaving Slack.
 
 ## Highlights
 
