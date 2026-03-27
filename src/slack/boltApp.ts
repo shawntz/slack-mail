@@ -52,11 +52,6 @@ export function registerSlackHandlers(app: App): void {
         userEmail: acct.google_email,
         bodyText: message.text,
       });
-      await client.reactions.add({
-        channel: message.channel,
-        timestamp: message.ts,
-        name: "white_check_mark",
-      });
     } catch (e) {
       logger.error(e);
       await client.chat.postMessage({
@@ -64,6 +59,17 @@ export function registerSlackHandlers(app: App): void {
         thread_ts: message.thread_ts,
         text: `Could not send email: ${e instanceof Error ? e.message : String(e)}`,
       });
+      return;
+    }
+
+    try {
+      await client.reactions.add({
+        channel: message.channel,
+        timestamp: message.ts,
+        name: "white_check_mark",
+      });
+    } catch (e) {
+      logger.warn("Failed to add reaction", e);
     }
   });
 }

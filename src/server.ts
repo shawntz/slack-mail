@@ -23,6 +23,7 @@ const BOT_SCOPES = [
   "groups:write",
   "chat:write",
   "commands",
+  "reactions:write",
   "users:read",
 ];
 
