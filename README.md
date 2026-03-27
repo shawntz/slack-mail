@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="Slacker Mail" width="128" height="128">
+  <img src="assets/logo.svg" alt="Slack Mailbot Logo" width="128" height="128">
 </p>
 
-<h1 align="center">Slacker Mail</h1>
+<h1 align="center">Slack Mailbot</h1>
 
 <p align="center">
   <strong>Your Gmail inbox, inside Slack.</strong><br>
