@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { createGmailForRefresh } from "./client.js";
 import { getHeader } from "./mime.js";
 import { decryptGoogleRefreshToken } from "../db/repos.js";
@@ -14,11 +15,62 @@ function encodeRawRfc2822(lines: string[]): string {
   return Buffer.from(raw, "utf8").toString("base64url");
 }
 
+export type ReplyAttachment = {
+  filename: string;
+  mimeType: string;
+  content: Buffer;
+};
+
+function randomBoundary(): string {
+  return `----=_Part_${randomBytes(16).toString("hex")}`;
+}
+
+function buildMultipartRaw(params: {
+  headers: string[];
+  bodyText: string;
+  files: ReplyAttachment[];
+}): string {
+  const boundary = randomBoundary();
+  const headerLines = [
+    ...params.headers,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    "",
+  ];
+
+  const parts: string[] = [];
+
+  // Text part
+  parts.push(
+    `--${boundary}`,
+    "Content-Type: text/plain; charset=utf-8",
+    "",
+    params.bodyText,
+  );
+
+  // Attachment parts
+  for (const file of params.files) {
+    parts.push(
+      `--${boundary}`,
+      `Content-Type: ${file.mimeType}; name="${file.filename}"`,
+      "Content-Transfer-Encoding: base64",
+      `Content-Disposition: attachment; filename="${file.filename}"`,
+      "",
+      file.content.toString("base64"),
+    );
+  }
+
+  parts.push(`--${boundary}--`);
+
+  const raw = headerLines.join("\r\n") + "\r\n" + parts.join("\r\n") + "\r\n";
+  return Buffer.from(raw, "utf8").toString("base64url");
+}
+
 export async function sendGmailReplyFromSlack(params: {
   account: SlackUserGmailRow;
   gmailThreadId: string;
   userEmail: string;
   bodyText: string;
+  files?: ReplyAttachment[];
 }): Promise<void> {
   const gmail = createGmailForRefresh(decryptGoogleRefreshToken(params.account));
   const thread = await gmail.users.threads.get({
@@ -79,22 +131,36 @@ export async function sendGmailReplyFromSlack(params: {
     // Fall back to bare email if we can't fetch the display name
   }
 
-  const rawLines = [
+  const commonHeaders = [
     `From: ${fromHeader}`,
     `To: ${replyTo}`,
     `Subject: ${subject}`,
     `In-Reply-To: ${inReplyTo}`,
     `References: ${references}`,
-    "Content-Type: text/plain; charset=utf-8",
-    "",
-    params.bodyText,
   ];
+
+  let raw: string;
+  if (params.files && params.files.length > 0) {
+    raw = buildMultipartRaw({
+      headers: commonHeaders,
+      bodyText: params.bodyText,
+      files: params.files,
+    });
+  } else {
+    const rawLines = [
+      ...commonHeaders,
+      "Content-Type: text/plain; charset=utf-8",
+      "",
+      params.bodyText,
+    ];
+    raw = encodeRawRfc2822(rawLines);
+  }
 
   await gmail.users.messages.send({
     userId: "me",
     requestBody: {
       threadId: params.gmailThreadId,
-      raw: encodeRawRfc2822(rawLines),
+      raw,
     },
   });
 }
