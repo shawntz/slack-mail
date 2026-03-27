@@ -1,10 +1,13 @@
 import type { App } from "@slack/bolt";
 import {
+  decryptBotToken,
   getSlackUserGmailByWorkspaceAndUser,
   getThreadMappingBySlackThread,
+  getWorkspaceById,
   getWorkspaceBySlackTeamId,
 } from "../db/repos.js";
 import { sendGmailReplyFromSlack } from "../gmail/sendReply.js";
+import type { ReplyAttachment } from "../gmail/sendReply.js";
 import { createGoogleLinkState, googleLinkUrl } from "../routes/oauthGoogle.js";
 
 export function registerSlackHandlers(app: App): void {
@@ -32,7 +35,9 @@ export function registerSlackHandlers(app: App): void {
     if ("bot_id" in message && message.bot_id) return;
     if (message.user === context.botUserId) return;
     if (!("channel" in message) || typeof message.channel !== "string") return;
-    if (!("text" in message) || typeof message.text !== "string" || !message.text.trim()) return;
+    const hasText = "text" in message && typeof message.text === "string" && message.text.trim();
+    const hasFiles = "files" in message && Array.isArray(message.files) && message.files.length > 0;
+    if (!hasText && !hasFiles) return;
 
     // Only handle threaded replies — ignore top-level messages in category channels
     if (!("thread_ts" in message) || !message.thread_ts) return;
@@ -45,12 +50,38 @@ export function registerSlackHandlers(app: App): void {
     const acct = await getSlackUserGmailByWorkspaceAndUser(mapping.workspace_id, message.user);
     if (!acct?.google_email) return;
 
+    // Download attached files from Slack
+    const files: ReplyAttachment[] = [];
+    if (hasFiles) {
+      const ws = await getWorkspaceById(mapping.workspace_id);
+      if (!ws) return;
+      const botToken = decryptBotToken(ws);
+      for (const f of (message as { files: Array<{ url_private_download?: string; name?: string; mimetype?: string }> }).files) {
+        if (!f.url_private_download) continue;
+        try {
+          const resp = await fetch(f.url_private_download, {
+            headers: { Authorization: `Bearer ${botToken}` },
+          });
+          if (!resp.ok) continue;
+          const buf = Buffer.from(await resp.arrayBuffer());
+          files.push({
+            filename: f.name ?? "attachment",
+            mimeType: f.mimetype ?? "application/octet-stream",
+            content: buf,
+          });
+        } catch (e) {
+          logger.warn("Failed to download Slack file", f.name, e);
+        }
+      }
+    }
+
     try {
       await sendGmailReplyFromSlack({
         account: acct,
         gmailThreadId: mapping.gmail_thread_id,
         userEmail: acct.google_email,
-        bodyText: message.text,
+        bodyText: hasText ? (message as { text: string }).text : "",
+        files: files.length > 0 ? files : undefined,
       });
     } catch (e) {
       logger.error(e);
