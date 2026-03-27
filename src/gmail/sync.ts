@@ -158,7 +158,8 @@ async function ingestOneMessage(params: {
   if (!claimed) return;
 
   const fromLine = formatFromForSlack(from);
-  const text = `*From:* ${fromLine}\n*Subject:* ${subject}\n\n${body}`;
+  const gmailLink = `https://mail.google.com/mail/u/0/#inbox/${params.messageId}`;
+  const text = `*From:* ${fromLine}\n*Subject:* ${subject}\n\n${body}\n\n<${gmailLink}|View in Gmail>`;
   let postTs: string | undefined;
   try {
     const post = await params.web.chat.postMessage({
