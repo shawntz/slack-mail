@@ -23,6 +23,7 @@ When `ingestOneMessage` processes an email:
 2. **For each attachment**, call `gmail.users.messages.attachments.get` to download the raw bytes (returned as base64-encoded data).
 3. **Upload to Slack** via `files.uploadV2` with `thread_ts` set to the email's Slack thread. For new threads, this is the `postTs` of the root message. For existing threads, this is the stored `slack_thread_ts`.
 4. Attachments are uploaded after the text message, so they appear as follow-ups in the thread.
+5. **Error handling:** Each attachment upload is independent — if one fails, log the error and continue with the rest. A failed attachment should not prevent the text message or other attachments from being posted.
 
 ### New function in `mime.ts`
 
