@@ -3,7 +3,7 @@ import type { WebClient } from "@slack/web-api";
 
 const { WebClient: WebClientCtor } = slackWebApi;
 import { createGmailForRefresh } from "./client.js";
-import { extractPlainText, formatFromForSlack, getHeader } from "./mime.js";
+import { extractAttachments, extractPlainText, formatFromForSlack, getHeader } from "./mime.js";
 import {
   claimGmailMessagePost,
   decryptBotToken,
@@ -187,6 +187,33 @@ async function ingestOneMessage(params: {
       subject,
       lastMessageId: rfcId,
     });
+  }
+
+  // Upload attachments to Slack thread
+  const attachmentThreadTs = threadTs ?? postTs;
+  if (attachmentThreadTs) {
+    const attachments = extractAttachments(msg.data.payload);
+    for (const att of attachments) {
+      try {
+        const attData = await gmail.users.messages.attachments.get({
+          userId: "me",
+          messageId: params.messageId,
+          id: att.attachmentId,
+        });
+        const base64 = attData.data.data;
+        if (!base64) continue;
+        const normalized = base64.replace(/-/g, "+").replace(/_/g, "/");
+        const fileBuffer = Buffer.from(normalized, "base64");
+        await params.web.filesUploadV2({
+          channel_id: channelId,
+          thread_ts: attachmentThreadTs,
+          filename: att.filename,
+          file: fileBuffer,
+        });
+      } catch (e) {
+        console.error("Failed to upload attachment to Slack", att.filename, e);
+      }
+    }
   }
 
   // Mark as read
