@@ -111,6 +111,7 @@ async function ingestOneMessage(params: {
     format: "full",
   });
   const labels = msg.data.labelIds ?? [];
+  console.log("[DEBUG] Message labels:", params.messageId, labels);
   if (!labels.includes("INBOX")) return;
   if (labels.includes("SENT")) return;
 
@@ -217,6 +218,7 @@ async function ingestOneMessage(params: {
   }
 
   // Mark as read
+  console.log("[DEBUG] About to mark as read. UNREAD in labels?", labels.includes("UNREAD"), "messageId:", params.messageId);
   if (labels.includes("UNREAD")) {
     try {
       await gmail.users.messages.modify({
