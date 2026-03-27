@@ -67,7 +67,20 @@ export async function sendGmailReplyFromSlack(params: {
     throw new Error("Could not determine reply recipient for thread");
   }
 
+  // Fetch display name from Gmail send-as settings
+  let fromHeader = params.userEmail;
+  try {
+    const sendAs = await gmail.users.settings.sendAs.list({ userId: "me" });
+    const primary = sendAs.data.sendAs?.find((s) => s.isPrimary);
+    if (primary?.displayName) {
+      fromHeader = `"${primary.displayName}" <${params.userEmail}>`;
+    }
+  } catch {
+    // Fall back to bare email if we can't fetch the display name
+  }
+
   const rawLines = [
+    `From: ${fromHeader}`,
     `To: ${replyTo}`,
     `Subject: ${subject}`,
     `In-Reply-To: ${inReplyTo}`,
