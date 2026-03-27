@@ -245,6 +245,134 @@ export async function updateThreadLastMessageId(
   );
 }
 
+export type GmailCategory = "primary" | "social" | "promotions" | "updates" | "forums";
+
+export async function getCategoryChannel(
+  workspaceId: number,
+  slackUserId: string,
+  category: GmailCategory,
+): Promise<{ slack_channel_id: string } | null> {
+  const pool = getPool();
+  const r = await pool.query<{ slack_channel_id: string }>(
+    `SELECT slack_channel_id FROM gmail_category_channels
+     WHERE workspace_id = $1 AND slack_user_id = $2 AND category = $3`,
+    [workspaceId, slackUserId, category],
+  );
+  return r.rows[0] ?? null;
+}
+
+export async function insertCategoryChannelOrGet(params: {
+  workspaceId: number;
+  slackUserId: string;
+  category: GmailCategory;
+  slackChannelId: string;
+}): Promise<string> {
+  const pool = getPool();
+  const ins = await pool.query<{ slack_channel_id: string }>(
+    `INSERT INTO gmail_category_channels
+      (workspace_id, slack_user_id, category, slack_channel_id)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (workspace_id, slack_user_id, category) DO NOTHING
+     RETURNING slack_channel_id`,
+    [params.workspaceId, params.slackUserId, params.category, params.slackChannelId],
+  );
+  if (ins.rows[0]) return ins.rows[0].slack_channel_id;
+  const existing = await getCategoryChannel(
+    params.workspaceId,
+    params.slackUserId,
+    params.category,
+  );
+  if (!existing) throw new Error("Category channel missing after insert race");
+  return existing.slack_channel_id;
+}
+
+export async function getThreadSlackThread(
+  workspaceId: number,
+  slackUserId: string,
+  gmailThreadId: string,
+): Promise<{ slack_channel_id: string; slack_thread_ts: string; last_message_id: string | null } | null> {
+  const pool = getPool();
+  const r = await pool.query<{ slack_channel_id: string; slack_thread_ts: string; last_message_id: string | null }>(
+    `SELECT slack_channel_id, slack_thread_ts, last_message_id FROM gmail_thread_slack_threads
+     WHERE workspace_id = $1 AND slack_user_id = $2 AND gmail_thread_id = $3`,
+    [workspaceId, slackUserId, gmailThreadId],
+  );
+  return r.rows[0] ?? null;
+}
+
+export async function insertThreadSlackThreadOrGet(params: {
+  workspaceId: number;
+  slackUserId: string;
+  gmailThreadId: string;
+  slackChannelId: string;
+  slackThreadTs: string;
+  subject: string | null;
+  lastMessageId: string | null;
+}): Promise<{ slack_channel_id: string; slack_thread_ts: string }> {
+  const pool = getPool();
+  const ins = await pool.query<{ slack_channel_id: string; slack_thread_ts: string }>(
+    `INSERT INTO gmail_thread_slack_threads
+      (workspace_id, slack_user_id, gmail_thread_id, slack_channel_id, slack_thread_ts, subject, last_message_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (workspace_id, slack_user_id, gmail_thread_id) DO NOTHING
+     RETURNING slack_channel_id, slack_thread_ts`,
+    [
+      params.workspaceId,
+      params.slackUserId,
+      params.gmailThreadId,
+      params.slackChannelId,
+      params.slackThreadTs,
+      params.subject,
+      params.lastMessageId,
+    ],
+  );
+  if (ins.rows[0]) return ins.rows[0];
+  const existing = await getThreadSlackThread(
+    params.workspaceId,
+    params.slackUserId,
+    params.gmailThreadId,
+  );
+  if (!existing) throw new Error("Thread mapping missing after insert race");
+  return { slack_channel_id: existing.slack_channel_id, slack_thread_ts: existing.slack_thread_ts };
+}
+
+export async function getThreadMappingBySlackThread(
+  slackChannelId: string,
+  slackThreadTs: string,
+): Promise<{
+  workspace_id: number;
+  slack_user_id: string;
+  gmail_thread_id: string;
+  last_message_id: string | null;
+} | null> {
+  const pool = getPool();
+  const r = await pool.query<{
+    workspace_id: number;
+    slack_user_id: string;
+    gmail_thread_id: string;
+    last_message_id: string | null;
+  }>(
+    `SELECT workspace_id, slack_user_id, gmail_thread_id, last_message_id
+     FROM gmail_thread_slack_threads WHERE slack_channel_id = $1 AND slack_thread_ts = $2`,
+    [slackChannelId, slackThreadTs],
+  );
+  return r.rows[0] ?? null;
+}
+
+export async function updateThreadSlackLastMessageId(
+  workspaceId: number,
+  slackUserId: string,
+  gmailThreadId: string,
+  lastMessageId: string,
+): Promise<void> {
+  const pool = getPool();
+  await pool.query(
+    `UPDATE gmail_thread_slack_threads SET last_message_id = $4
+     WHERE workspace_id = $1 AND slack_user_id = $2 AND gmail_thread_id = $3`,
+    [workspaceId, slackUserId, gmailThreadId, lastMessageId],
+  );
+}
+
 /** Returns true if this worker claimed the message (should post); false if already synced. */
 export async function claimGmailMessagePost(params: {
   workspaceId: number;
